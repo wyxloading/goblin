@@ -24,6 +24,8 @@ use crate::strtab;
 
 use log::debug;
 
+use scroll;
+
 #[derive(Debug)]
 /// An analyzed PE32/PE32+ binary
 pub struct PE<'a> {
@@ -118,7 +120,16 @@ impl<'a> PE<'a> {
 
             debug!("exception data: {:#?}", exception_data);
             if let Some(exception_table) = *optional_header.data_directories.get_exception_table() {
-                exception_data = Some(exception::ExceptionData::parse(bytes, exception_table, &sections, file_alignment)?);
+                exception_data = match exception::ExceptionData::parse(bytes, exception_table, &sections, file_alignment) {
+                    Ok(ed) => Some(ed),
+                    Err(e) => match e {
+                        error::Error::Scroll(scroll::Error::BadInput{size:s, msg:m}) => {
+                            debug!("{} ({})", m, s);
+                            None
+                        },
+                        _ => panic!(e),
+                    }
+                }
             }
         }
         Ok( PE {
